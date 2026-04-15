@@ -1,0 +1,5 @@
+__pycache__/
+.streamlit/secrets.toml
+oauth_client_secret.json
+*.pyc
+.env
