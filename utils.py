@@ -95,7 +95,8 @@ def generate_weekly_bar_data(df: pd.DataFrame, days_back=7):
 def get_screenshot_kpis(df: pd.DataFrame, days_back: int):
     today = date.today()
     if days_back == 0:
-        min_date = pd.to_datetime(df['completed_at']).dt.date.min() if not df.empty else today
+        valid_dates = pd.to_datetime(df['completed_at'], errors='coerce').dropna()
+        min_date = valid_dates.dt.date.min() if not valid_dates.empty else today
         if pd.isna(min_date): min_date = today
         days_back = (today - min_date).days + 1
     days_back = max(1, days_back)
