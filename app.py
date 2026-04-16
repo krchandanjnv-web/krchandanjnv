@@ -309,9 +309,9 @@ with tab2:
             days_back = 30
             
         if days_back > 0:
-            cutoff_date = date.today() - timedelta(days=days_back-1)
-            created_dt = pd.to_datetime(viz_df['created_at']).dt.date
-            completed_dt = pd.to_datetime(viz_df['completed_at'], errors='coerce').dt.date
+            cutoff_date = pd.to_datetime(date.today() - timedelta(days=days_back-1))
+            created_dt = pd.to_datetime(viz_df['created_at'])
+            completed_dt = pd.to_datetime(viz_df['completed_at'], errors='coerce')
             filter_date = completed_dt.fillna(created_dt)
             viz_df = viz_df[filter_date >= cutoff_date]
             
