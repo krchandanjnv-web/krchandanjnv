@@ -136,7 +136,7 @@ else:
     pending_global['deadline_status'] = "Upcoming"
 
 # Tab Layout
-tab1, tab2, tab3, tab4 = st.tabs(["📋 Task Manager", "📊 Analytics & Insights", "🏆 Trophy Room", "🤖 AI Coach"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Task Manager", "📊 Analytics & Insights", "🏆 Trophy Room", "🤖 AI Coach", "🌐 Leaderboard"])
 
 # --- PHASE 8: DEEP WORK ENGINE ---
 with st.sidebar:
@@ -182,18 +182,25 @@ with tab1:
         with col2:
             template = st.selectbox("Quick Templates (Optional)", ["None", "Study", "Exercise", "Meditation", "Work", "Reading"])
             
-        col3, col4 = st.columns(2)
+        col3, col4, col5 = st.columns([2, 2, 1])
         with col3:
             priority = st.selectbox("Priority", ["High", "Medium", "Low"])
         with col4:
             deadline = st.date_input("Deadline", min_value=date.today())
+        with col5:
+            st.markdown("<br>", unsafe_allow_html=True)
+            is_habit = st.checkbox("🔁 Daily Habit")
             
         submit = st.form_submit_button("Add Task")
         
         if submit:
             final_title = template if template != "None" and not title else title
+            final_category = template if template != "None" else "General"
+            if is_habit:
+                final_category += " [HABIT]"
+                
             if final_title:
-                success = save_task(user_email, final_title, template if template != "None" else "General", priority, str(deadline))
+                success = save_task(user_email, final_title, final_category, priority, str(deadline))
                 if success:
                     st.success("Task Added successfully!")
                     st.rerun()
@@ -259,7 +266,8 @@ with tab1:
                 with col_b:
                     priority_emoji = "🔴" if row['priority'] == "High" else "🟡" if row['priority'] == "Medium" else "🟢"
                     xp_val = 50 if row['priority'] == "High" else 20 if row['priority'] == "Medium" else 10
-                    st.markdown(f"**Main Task** <span style='font-size:0.8em; color:gray'>[+{xp_val} XP]</span> | {priority_emoji} {row['priority']} | {dl_text}", unsafe_allow_html=True)
+                    habit_badge = " **🔁 HABIT** " if "[HABIT]" in str(row.get('category','')) else ""
+                    st.markdown(f"**Main Task** <span style='font-size:0.8em; color:gray'>[+{xp_val} XP]</span> | {priority_emoji} {row['priority']} | {dl_text}{habit_badge}", unsafe_allow_html=True)
                 with col_c:
                     if st.button("Delete", key=f"del_{row['id']}", help="Delete Task"):
                         delete_task(row['id'])
@@ -303,6 +311,9 @@ with tab1:
             
                 if do_complete:
                     update_task_status(row['id'], "Completed")
+                    if "[HABIT]" in str(row.get('category','')):
+                        tmrw = str(date.today() + timedelta(days=1))
+                        save_task(user_email, row['title'], row['category'], row['priority'], tmrw)
                     st.rerun()
                 
         if not completed_tasks.empty:
@@ -518,3 +529,40 @@ with tab4:
                     
                 except Exception as e:
                     st.error(f"AI Engine failed to initialize: {e}")
+
+with tab5:
+    st.header("🌐 Global Leaderboard")
+    st.markdown("Compete against every player using this dashboard.")
+    if st.button("Refresh Ranks"):
+        st.rerun()
+        
+    global_tasks = fetch_all_tasks(email=None)
+    if not global_tasks.empty:
+        leaderboard = []
+        unique_users = [u for u in global_tasks['user_email'].unique() if pd.notna(u)]
+        
+        for u in unique_users:
+            if not u: continue
+            u_tasks = global_tasks[global_tasks['user_email'] == u]
+            u_gam = calculate_gamification(u_tasks)
+            c_count = len(u_tasks[u_tasks['status'] == 'Completed'])
+            obfuscated = u[:3] + "***" + u[u.find("@"):] if "@" in u else "Unknown Hero"
+            if u == user_email: obfuscated = "⭐ YOU (" + obfuscated + ")"
+            
+            leaderboard.append({
+                "Player": obfuscated,
+                "Level": u_gam['level'],
+                "Total XP": u_gam['total_xp'],
+                "Quests Done": c_count
+            })
+            
+        ldf = pd.DataFrame(leaderboard).sort_values(by=["Level", "Total XP"], ascending=[False, False]).reset_index(drop=True)
+        ldf.index = ldf.index + 1
+        
+        st.dataframe(ldf, use_container_width=True)
+        
+        if len(ldf) > 0:
+             top_player = ldf.iloc[0]['Player']
+             st.success(f"🏆 Current World Rank #1 is **{top_player}**!")
+    else:
+        st.info("No players found on the server.")
