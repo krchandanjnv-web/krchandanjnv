@@ -513,7 +513,7 @@ with tab4:
                         if dl_status == "Due Today": urgent.append(row['title'])
                         elif dl_status == "Overdue": overdue.append(row['title'])
                     
-                    prompt = f\"\"\"
+                    prompt = f"""
                     You are an intense, encouraging RPG video game coach speaking directly to me. 
                     I am currently Level {level_info['level']} with {level_info['current_level_xp']} XP.
                     
@@ -522,7 +522,7 @@ with tab4:
                     OVERDUE (Penalty): {overdue}
                     
                     Give me a highly motivating 3-paragraph strategy on how I should tackle my day. Do not use markdown headers, just bold the important actions. End with a war cry. Keep it strictly focused on my tasks.
-                    \"\"\"
+                    """
                     
                     response = model.generate_content(prompt)
                     st.info(response.text)
