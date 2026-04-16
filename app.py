@@ -1,7 +1,8 @@
 import streamlit as st
 import json
 from auth import login, logout
-from gsheets_db import fetch_all_tasks, save_task, update_task_status, delete_task, update_subtasks
+from gsheets_db import fetch_all_tasks, save_task, update_task_status, delete_task, update_subtasks, cleanup_old_tasks, get_google_sheet
+import google.generativeai as genai
 import pandas as pd
 import plotly.express as px
 from datetime import datetime, date, timedelta
@@ -135,7 +136,37 @@ else:
     pending_global['deadline_status'] = "Upcoming"
 
 # Tab Layout
-tab1, tab2, tab3 = st.tabs(["📋 Task Manager", "📊 Analytics & Insights", "🏆 Trophy Room"])
+tab1, tab2, tab3, tab4 = st.tabs(["📋 Task Manager", "📊 Analytics & Insights", "🏆 Trophy Room", "🤖 AI Coach"])
+
+# --- PHASE 8: DEEP WORK ENGINE ---
+with st.sidebar:
+    st.header("⏱️ Deep Work Engine")
+    if 'focus_start' not in st.session_state:
+        st.session_state.focus_start = None
+        
+    if st.session_state.focus_start is None:
+        if st.button("▶️ Start Focus Session"):
+            st.session_state.focus_start = datetime.now()
+            st.rerun()
+    else:
+        st.warning(f"Focusing since {st.session_state.focus_start.strftime('%H:%M')}")
+        if st.button("⏹️ End Session"):
+            elapsed = datetime.now() - st.session_state.focus_start
+            minutes = elapsed.total_seconds() / 60
+            st.session_state.focus_start = None
+            if minutes >= 25:
+                import uuid
+                sheet = get_google_sheet()
+                if sheet:
+                    row_data = [str(uuid.uuid4()), user_email, f"Focus Block ({int(minutes)}m)", "Meditation", "High", "Completed", str(date.today()), datetime.now().isoformat(), datetime.now().isoformat(), "[]"]
+                    sheet.append_row(row_data)
+                st.success("25m+ Focus Completed! +50 XP Awarded!")
+            else:
+                st.info(f"Session ended ({int(minutes)}m). Need 25m for XP!")
+            st.rerun()
+            
+    st.divider()
+    st.info("Work for 25+ minutes strictly uninterrupted to earn a 50 XP Focus Bounty.")
 
 with tab1:
     st.header("Task Manager")
@@ -440,4 +471,50 @@ with tab3:
         st.success("No urgent high-priority tasks pending! Great job.")
         
     st.divider()
-    st.button("Run Automated Cleanup (>30 days old)", help="Click to clean up old completed tasks.", on_click=lambda: st.info("Cleanup complete (simulated)"))
+    if st.button("Run Automated Cleanup (>30 days old)", help="Click to clean up old completed tasks."):
+        with st.spinner("Deleting dead tasks..."):
+            count = cleanup_old_tasks(user_email, 30)
+            st.success(f"Archived and destroyed {count} old tasks!")
+            st.rerun()
+
+with tab4:
+    st.header("🤖 AI Productivity Coach")
+    st.markdown("Your personal AI assistant, powered by Google Gemini.")
+    
+    gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+    
+    if not gemini_key:
+        st.error("⚠️ **Gemini API Key missing!** Please add `GEMINI_API_KEY = \"your-key\"` to your Streamlit Secrets.")
+    else:
+        genai.configure(api_key=gemini_key)
+        
+        if st.button("🔮 Analyze My Day & Generate Strategy"):
+            with st.spinner("The AI is analyzing your XP and tasks..."):
+                try:
+                    model = genai.GenerativeModel('gemini-2.5-flash')
+                    pending_bounties = df_tasks[df_tasks['status'] == 'Pending']
+                    task_titles = pending_bounties['title'].tolist()
+                    
+                    urgent = []
+                    overdue = []
+                    for index, row in pending_bounties.iterrows():
+                        dl_status = get_dl_status(row['deadline'])[0]
+                        if dl_status == "Due Today": urgent.append(row['title'])
+                        elif dl_status == "Overdue": overdue.append(row['title'])
+                    
+                    prompt = f\"\"\"
+                    You are an intense, encouraging RPG video game coach speaking directly to me. 
+                    I am currently Level {level_info['level']} with {level_info['current_level_xp']} XP.
+                    
+                    Here are my currently pending quests (tasks): {task_titles}.
+                    URGENT (Due Today): {urgent}
+                    OVERDUE (Penalty): {overdue}
+                    
+                    Give me a highly motivating 3-paragraph strategy on how I should tackle my day. Do not use markdown headers, just bold the important actions. End with a war cry. Keep it strictly focused on my tasks.
+                    \"\"\"
+                    
+                    response = model.generate_content(prompt)
+                    st.info(response.text)
+                    
+                except Exception as e:
+                    st.error(f"AI Engine failed to initialize: {e}")

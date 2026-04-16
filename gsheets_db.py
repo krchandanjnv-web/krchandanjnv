@@ -145,6 +145,29 @@ def delete_task(task_id):
         st.error(f"Error deleting task: {e}")
         return False
 
-def archive_old_tasks():
-    # Placeholder for the automated cleanup feature to be implemented later
-    pass
+def cleanup_old_tasks(user_email, days=30):
+    sheet = get_google_sheet()
+    if not sheet: return 0
+    try:
+        from datetime import datetime, timedelta
+        records = sheet.get_all_records()
+        cutoff = datetime.now() - timedelta(days=days)
+        
+        deleted_count = 0
+        # Iterate backwards to safely delete rows without messing up indices
+        for j in range(len(records) - 1, -1, -1):
+            row = records[j]
+            if row.get('user_email') == user_email and row.get('status') == 'Completed':
+                c_dt_str = row.get('completed_at')
+                try:
+                    c_dt = datetime.fromisoformat(str(c_dt_str))
+                    if c_dt < cutoff:
+                        sheet.delete_rows(j + 2) # +2 because 1-indexed (1) + header is row 1 (+1)
+                        deleted_count += 1
+                except:
+                    pass
+        return deleted_count
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Error cleaning up tasks: {e}")
+        return 0
